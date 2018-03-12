@@ -21,7 +21,20 @@ spec:
           - server
         resources:
 {{ toYaml .Values.server.resources | indent 12 }}
-
+        lifenessProbe:
+          exec:
+            command:
+            - pidof
+            - sshd
+          periodSeconds: 10
+          failureThreshold: 30
+        readinessProbe:
+          exec:
+            command:
+            - pidof
+            - sshd
+          periodSeconds: 10
+          failureThreshold: 30
 {{ if .Values.server.nodeSelector }}
       nodeSelector:
 {{ toYaml .Values.server.nodeSelector | indent 8 }}

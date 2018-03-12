@@ -20,8 +20,10 @@ operator:
     requests:
       cpu: 10m
       memory: 50Mi
-  nodeSelector:
-    sftp-operator: 'true'
+  tolerations:
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
 
 server:
   replicaCount: 2
@@ -32,9 +34,3 @@ server:
     requests:
       cpu: 10m
       memory: 50Mi
-  nodeSelector:
-    sftp-server: 'true'
-  tolerations:
-    - key: node-role.kubernetes.io/node
-      operator: Exists
-      effect: NoSchedule
