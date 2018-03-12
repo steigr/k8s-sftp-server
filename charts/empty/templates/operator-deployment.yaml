@@ -1,7 +1,7 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{ template "fullname" . }}-operator
+  name: sftp-operator
   labels:
     draft: {{ default "draft-app" .Values.draft }}
     chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
@@ -11,9 +11,8 @@ spec:
     metadata:
       labels:
         draft: {{ default "draft-app" .Values.draft }}
-        app: {{ template "fullname" . }}-operator
+        app: sftp-operator
     spec:
-      serviceAccountName: cluster-admin
       containers:
       - name: {{ .Chart.Name }}-operator
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -22,3 +21,13 @@ spec:
           - operator
         resources:
 {{ toYaml .Values.operator.resources | indent 12 }}
+
+{{ if .Values.operator.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.operator.nodeSelector | indent 8 }}
+{{ end }}
+
+{{ if .Values.operator.tolerations }}
+      tolerations:
+{{ toYaml .Values.operator.tolerations | indent 8 }}
+{{ end }}

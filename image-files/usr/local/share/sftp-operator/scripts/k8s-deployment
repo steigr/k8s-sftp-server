@@ -108,4 +108,5 @@ upload_ssh_config() {
 
 download_ssh_config() {
     kubectl get configmap/sftp-server-config --namespace="$NAMESPACE" --output=json | jq -r '.data.sshd_config' | install -m 0644 -D /dev/stdin /etc/ssh/sshd_config
+    test -s /etc/ssh/sshd_config || exit 1
 }

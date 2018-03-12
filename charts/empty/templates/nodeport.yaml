@@ -1,7 +1,7 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: {{ template "fullname" . }}
+  name: {{ template "fullname" . }}-port
   namespace: {{ .Values.namespaceOverride }}
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
@@ -12,5 +12,5 @@ spec:
       targetPort: {{ .Values.service.internalPort }}
       protocol: TCP
   selector:
-    app: {{ template "fullname" . }}
-  type: ClusterIP
+    app: {{ template "fullname" . }}-server
+  type: NodePort

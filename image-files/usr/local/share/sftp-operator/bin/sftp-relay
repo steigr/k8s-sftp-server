@@ -93,6 +93,11 @@ sftp_container="$sftp_container"
 sftp_namespace="$sftp_namespace"
 sftp_path="$sftp_path"
 EOF
+    # use in-cluster config
+    if [[ -f "/var/run/secrets/kubernetes.io/serviceaccount/token" ]]; then
+        [[ -z "$KUBERNETES_SERVICE_HOST" ]] || echo "export KUBERNETES_SERVICE_HOST=$KUBERNETES_SERVICE_HOST" >> "/home/$sftp_user/sftp-environment"
+        [[ -z "$KUBERNETES_SERVICE_PORT" ]] || echo "export KUBERNETES_SERVICE_PORT=$KUBERNETES_SERVICE_PORT" >> "/home/$sftp_user/sftp-environment"
+    fi
 }
 
 prepare_sftp_access() {

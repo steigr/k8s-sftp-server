@@ -8,7 +8,7 @@ image:
 service:
   name: sftp
   type: ClusterIP
-  externalPort: 8022
+  externalPort: 22
   internalPort: 22
 
 operator:
@@ -16,17 +16,25 @@ operator:
   resources:
     limits:
       cpu: 100m
-      memory: 30Mi
+      memory: 50Mi
     requests:
       cpu: 10m
-      memory: 30Mi
+      memory: 50Mi
+  nodeSelector:
+    sftp-operator: 'true'
 
 server:
   replicaCount: 2
   resources:
     limits:
       cpu: 2000m
-      memory: 30Mi
+      memory: 50Mi
     requests:
       cpu: 10m
-      memory: 30Mi
+      memory: 50Mi
+  nodeSelector:
+    sftp-server: 'true'
+  tolerations:
+    - key: node-role.kubernetes.io/node
+      operator: Exists
+      effect: NoSchedule

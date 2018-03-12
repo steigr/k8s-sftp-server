@@ -9,6 +9,7 @@ pidof tini >/dev/null 2>&1 </dev/null || TINI_SUBREAPER=1 exec tini -- "$0" "${@
 
 vars() {
     export NAMESPACE="${NAMESPACE:-sftp}"
+    [[ ! -e "/var/run/secrets/kubernetes.io/serviceaccount/namespace" ]] || export NAMESPACE="$(cat "/var/run/secrets/kubernetes.io/serviceaccount/namespace")"
 }
 
 main() {
