@@ -1,0 +1,15 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: @@SSH_SERVICE_NAME@@
+  namespace: @@NAMESPACE@@
+spec:
+  ports:
+    - protocol: TCP
+      port: 22
+      targetPort: @@SSH_SERVICE_NAME@@
+  selector:
+    app: @@SSH_LABEL@@
+  clusterIP: None
+  type: ClusterIP
+  sessionAffinity: ClientIP

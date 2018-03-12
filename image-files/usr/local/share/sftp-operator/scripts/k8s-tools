@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+# kubernetes helper
+
+dereference_owner() {
+    local namespace="$1" api="$2" kind="$3" name="$4"
+    kubectl get "$kind/$name" \
+      --namespace="$namespace" \
+      --output="custom-columns=namespace:metadata.namespace,api:apiVersion,kind:metadata.ownerReferences[].kind,name:metadata.ownerReferences[].name" \
+      --no-headers \
+    | while read ownerNamespace ownerApi ownerKind ownerName; do
+        if [[ "$ownerKind" = "<none>" ]]; then
+            echo "$namespace" "$api" "$kind" "$name"
+        else
+            dereference_owner "$ownerNamespace" "$ownerApi" "$ownerKind" "$ownerName"
+        fi
+    done
+}

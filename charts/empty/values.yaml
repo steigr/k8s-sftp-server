@@ -1,0 +1,32 @@
+# Default values for golang.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+image:
+  pullPolicy: IfNotPresent
+
+service:
+  name: sftp
+  type: ClusterIP
+  externalPort: 8022
+  internalPort: 22
+
+operator:
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 100m
+      memory: 30Mi
+    requests:
+      cpu: 10m
+      memory: 30Mi
+
+server:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 30Mi
+    requests:
+      cpu: 10m
+      memory: 30Mi

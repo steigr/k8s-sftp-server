@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+exec 2>>"$HOME/sftp-session.err"
+set -e
+
+KUBECONFIG="${KUBECONFIG:-/root/.kube/config}"
+[[ -f "$KUBECONFIG" ]] || KUBECONFIG=""
+
+source "$HOME/sftp-environment"
+
+pod="$($KUBECTL get pods --namespace=$sftp_namespace --selector=$labels --no-headers --output=custom-columns=name:metadata.name,name:status.phase | grep Running$ | awk '{print $1}' | shuf -n 1 | xargs -n1 basename)"
+
+$KUBECTL cp /$asset_path/ $pod:/tmp/$asset_path/
+$KUBECTL exec $pod --stdin=true --tty=false $sftp_container -- $su_exec /tmp/$asset_path/sftp-server -d "$sftp_path"
+ret=$?
+$KUBECTL exec $pod rm -r /tmp/sftp-server /tmp/$asset_path >>"$HOME/sftp-session.err"
+exit $ret

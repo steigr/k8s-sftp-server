@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+
+base64_encode() {
+    echo "${@}" | base64 | xargs -n1 printf --
+}
+
+base64_decode() {
+    echo "${@}" | base64 -d
+}

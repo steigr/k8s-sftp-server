@@ -1,0 +1,36 @@
+#!/usr/bin/env sh
+# sftp-operator
+
+# enable call tracing
+[[ -z "$TRACE" ]] || set -x
+
+# wrap in tini
+pidof tini >/dev/null 2>&1 </dev/null || TINI_SUBREAPER=1 exec tini -- "$0" "${@}"
+
+vars() {
+    export NAMESPACE="${NAMESPACE:-sftp}"
+}
+
+main() {
+    local mode="$1"; shift
+    case "$mode" in
+        credentials|operator)
+            export "PATH=/usr/local/share/sftp-operator/bin:$PATH"
+            exec sftp-credentials credentials "${@}"
+        ;;
+        relay|server)
+            export "PATH=/usr/local/share/sftp-operator/bin:$PATH"
+            exec sftp-relay relay "${@}"
+        ;;
+        deploy|install)
+            export "PATH=/usr/local/share/sftp-operator/bin:$PATH"
+            exec sftp-deploy deploy "${@}"
+        ;;
+        *)
+            exec "$mode" "${@}"
+        ;;
+    esac
+}
+
+vars
+main "${@}"

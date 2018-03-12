@@ -1,0 +1,111 @@
+#!/usr/bin/env sh
+
+source /usr/local/share/sftp-operator/scripts/base64
+
+deploy_manifest_vars() {
+    # common settings
+    export SFTP_KUBECONFIG_PATH="${SFTP_KUBECONFIG_PATH:-/kubeconfig}"
+    export SFTP_NAMESPACE="${SFTP_NAMESPACE:-sftp}"
+    export SFTP_REPLICAS="${SFTP_REPLICAS:-2}"
+    export SFTP_SERVER_IMAGE="${SFTP_SERVER_IMAGE:-quay.io/steigr/sftp-operator:latest}"
+    export MANIFEST_DIR="${MANIFEST_DIR:-/usr/local/share/sftp-operator/manifest}"
+
+    # operator settings
+    export SFTP_OPERATOR_SERVICE_NAME="${SFTP_OPERATOR_SERVICE_NAME:-sftp-operator}"
+    export SFTP_OPERATOR_LABEL="${SFTP_OPERATOR_LABEL:-sftp-operator}"
+
+    # server settings
+    export SFTP_SSH_LABEL="${SFTP_LABEL:-sftp-server}"
+    export SFTP_SSH_SERVICE_NAME="${SFTP_SERVICE_NAME:-sftp-server}"
+
+}
+
+deploy_manifest() {
+    deploy_manifest_vars
+
+    SED_ARGS=$(ls "$MANIFEST_DIR"/*.yaml \
+    | xargs -n1 -I{} grep -E '@@[A-Za-z0-9_-][A-Za-z0-9_-]*@@' '{}' \
+    | sed -e 's|@@\([A-Za-z0-9_-][A-Za-z0-9_-]*\)@@|\n-e "s\|@@\1@@\|$SFTP_\1\|"|g' \
+    | grep "^-e \"s|" \
+    | sort \
+    | uniq \
+    | paste -d" " -s -)
+
+
+    ls "$MANIFEST_DIR"/*.yaml \
+    | xargs -n1 -I{} sh -c "sed $SED_ARGS {}; printf '\n---\n'" \
+    | kubectl create -f -
+}
+
+download_host_keys() {
+    if kubectl get secret sftp-server-host-keys --namespace=$NAMESPACE --output=json 2>/dev/null > /tmp/keys; then
+        jq -r '.data | to_entries | .[].key' </tmp/keys | while read type; do
+            kubectl get secret sftp-server-host-keys --namespace=$NAMESPACE --output=custom-columns=data:data.$type --no-headers | base64 -d | install -D -m 0600 /dev/stdin /etc/ssh/ssh_host_${type}_key
+            ssh-keygen -y -f /etc/ssh/ssh_host_${type}_key | install -D -m 0644 /dev/stdin /etc/ssh/ssh_host_${type}_key.pub
+        done
+    fi
+    rm /tmp/keys
+}
+
+create_host_keys() {
+    ssh-keygen -A
+}
+
+ssh_host_keys_header() {
+    cat <<EOF
+kind: Secret
+apiVersion: v1
+metadata:
+  name: sftp-server-host-keys
+  namespace: $NAMESPACE
+data:
+EOF
+}
+
+ssh_host_keys_data() {
+    find /etc/ssh -name 'ssh_host_*_key' | while read keyfile; do
+        echo "  $(basename "$keyfile" | sed -e 's|^ssh_host_||' -e 's|_key$||'): $(base64_encode "$(cat "$keyfile")")"
+    done
+}
+
+upload_host_keys() {
+    ( ssh_host_keys_header; ssh_host_keys_data ) | kubectl create -f - 2>/dev/null
+}
+
+sshd_config_header() {
+    cat <<EOF
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: sftp-server-config
+  namespace: $NAMESPACE
+data:
+EOF
+}
+
+sshd_config_data() {
+    cat <<EOF
+Subsystem                  sftp    /usr/lib/ssh/sftp-server
+UsePAM                     yes
+PermitRootLogin            no
+AllowAgentForwarding       no
+AllowTcpForwarding         no
+AllowStreamLocalForwarding no
+AuthenticationMethods      password
+ForceCommand               /usr/lib/ssh/sftp-server
+GatewayPorts               no
+LogLevel                   DEBUG3
+PermitTTY                  no
+StrictModes                no
+PasswordAuthentication     yes
+X11Forwarding              no
+EOF
+}
+
+upload_ssh_config() {
+    ( sshd_config_header; echo "  sshd_config: |"; sshd_config_data | sed -e 's|^|    |') | kubectl create -f - 2>/dev/null
+}
+
+download_ssh_config() {
+    kubectl get configmap/sftp-server-config --namespace="$NAMESPACE" --output=json | jq -r '.data.sshd_config' | install -m 0644 -D /dev/stdin /etc/ssh/sshd_config
+}

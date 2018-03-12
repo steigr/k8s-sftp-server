@@ -1,0 +1,144 @@
+#!/usr/bin/env sh
+#sftp-relay
+
+# enable call tracing
+[[ -z "$TRACE" ]] || set -x
+
+# receive ssh config
+# receive ssh keys
+# create missing ssh keys
+# launch sshd
+# watch out for changes in passwd, authorized-keys secret and deploy them
+
+source /usr/local/share/sftp-operator/scripts/k8s-tools
+source /usr/local/share/sftp-operator/scripts/k8s-deployment
+source /usr/local/share/sftp-operator/scripts/base64
+source /usr/local/share/sftp-operator/scripts/password-generator
+source /usr/local/share/sftp-operator/scripts/ssh
+
+vars() {
+    export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
+    [[ -f "$KUBECONFIG" ]] || KUBECONFIG=""
+    export SFTP_USER_ID=65534
+}
+
+add_ssh_user() {
+    local sftp_user="$1"
+    echo "$sftp_user:x:${SFTP_USER_ID}:65534:nobody:/home/$sftp_user:/bin/sh" >> /etc/passwd
+    sort /etc/passwd | uniq > /etc/passwd.2 && mv /etc/passwd.2 /etc/passwd
+    install -D -d -m 0755 -o "$sftp_user" "/home/$sftp_user"
+}
+
+install_ssh_authorized_key() {
+    local tmp sftp_user="$1" sftp_password="$2"
+    tmp="$(mktemp -u)"
+    cat | install -m0600 -D /dev/stdin "$tmp" 
+    install -d -D -m 0755 -o "$sftp_user" "/home/$sftp_user/.ssh"
+    expect <<EOF | install -D -m 0600 -o "$sftp_user" /dev/stdin "/home/$sftp_user/.ssh/authorized-keys"
+    log_user 0
+    spawn ssh-keygen -y -f "$tmp"
+    expect "Enter passphrase:"
+    send "$sftp_password\r"
+    log_user 1
+    expect eof
+EOF
+    rm -f "$tmp"
+}
+
+set_password_for() {
+    local sftp_user="$1" sftp_password
+    sftp_password="$(cat)"
+    echo "$sftp_user:$sftp_password" | chpasswd
+}
+
+get_secret() {
+    local namespace="$1" name="$2"
+    namespace="${namespace:+--namespace=$namespace}"
+    namespace="${namespace:---all-namespaces --selector=sftp-data=login-store --output=custom-columns=namespace:metadata.namespace,name:metadata.name}"
+    name="${name:+secrets/$name}"
+    name="${name:-secrets}"
+    [[ $# -lt 1 ]] || shift
+    [[ $# -lt 1 ]] || shift
+    kubectl get $name $namespace --no-headers "${@}"
+}
+
+install_sftp_handler() {
+    local KUBECTL pod asset_path remote_user su_exec sftp_user="$1" sftp_namespace="$2" sftp_container="$3" sftp_path="$4" target_user="$5" labels="$6"
+    
+    KUBECTL="/bin/kubectl --kubeconfig=$KUBECONFIG --namespace=$sftp_namespace"
+    
+    pod="$($KUBECTL get pods --namespace=$sftp_namespace --selector=$labels --no-headers --output=custom-columns=name:metadata.name,name:status.phase | grep Running$ | awk '{print $1}' | shuf -n 1 | xargs -n1 basename)"
+
+    [[ ! "$target_user" = "null" ]] || target_user="root"
+    [[ ! "$sftp_path" = "null"   ]] || sftp_path="$($KUBECTL exec $pod -- pwd)"
+    [[ ! "$sftp_container" = "null" ]] || sftp_container=""
+
+    sftp_container="${sftp_container:+--container=$sftp_container}"
+    sftp_path="${sftp_path:-/}"
+    asset_path="sftp"
+
+    # detect remote user
+    remote_user="$($KUBECTL exec $pod -- whoami)"
+    [[ ! "$remote_user" = "root" ]] || su_exec="/tmp/$asset_path/su-exec $target_user"
+    [[ ! "$target_user" = "root" ]] || su_exec=""
+
+    cat <<EOF | install -D -m 0700 -o "$sftp_user" /dev/stdin "/home/$sftp_user/sftp-environment"
+KUBECTL="$KUBECTL"
+labels="$labels"
+
+asset_path="$asset_path"
+su_exec="$su_exec"
+
+sftp_container="$sftp_container"
+sftp_namespace="$sftp_namespace"
+sftp_path="$sftp_path"
+EOF
+}
+
+prepare_sftp_access() {
+    local tmp password sftp_container sftp_user sftp_path target_user owner_manifest_json owner_name owner_kind labels namespace="$1" name="$2"
+    tmp="$(mktemp -u)"
+    get_secret "$namespace" "$name" --output=json > "$tmp"
+    sftp_user="$(jq -r '.data.username' < "$tmp" | base64 -d)"
+    add_ssh_user "$sftp_user"
+    password="$(jq -r '.data.password' < "$tmp" | base64 -d)"
+    echo "$password" | set_password_for "$sftp_user"
+    jq -r '.data.key' < "$tmp" | base64 -d | install_ssh_authorized_key "$sftp_user" "$password"
+
+    owner_kind=$(jq -r '.metadata.ownerReferences[0].kind' < "$tmp")
+    owner_name=$(jq -r '.metadata.ownerReferences[0].name' < "$tmp")
+
+    owner_manifest_json="$(kubectl get $owner_kind/$owner_name --namespace=$namespace -o json 2>/dev/null)"
+
+    sftp_container="$(echo "$owner_manifest_json" | jq -r '.metadata.annotations."sftp-container"' 2>/dev/null)"
+    sftp_path="$(echo "$owner_manifest_json" | jq -r '.metadata.annotations."sftp-path"' 2>/dev/null)"
+    target_user="$(echo "$owner_manifest_json" | jq -r '.metadata.annotations."sftp-user"' 2>/dev/null)"
+    labels="$(echo "$owner_manifest_json" | jq -r '.spec.template.metadata.labels | to_entries | .[] | .key + "=" + .value' 2>/dev/null | paste -d, -s)"
+
+    install_sftp_handler "$sftp_user" "$namespace" "$sftp_container" "$sftp_path" "$target_user" "$labels"
+    rm "$tmp"
+}
+
+process_secrets() {
+    get_secret | while read namespace name; do
+        prepare_sftp_access "$namespace" "$name"
+    done
+}
+
+watch_secrets() {
+    get_secret "" "" --watch-only | while read namespace name; do
+        prepare_sftp_access "$namespace" "$name"
+    done
+}
+
+vars
+
+download_ssh_config
+download_host_keys
+create_host_keys
+
+process_secrets
+echo "Starting SSHd"
+ssh_run_server
+
+watch_secrets "${@}"

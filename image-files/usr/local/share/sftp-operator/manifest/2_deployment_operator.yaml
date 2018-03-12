@@ -1,0 +1,43 @@
+kind: Deployment
+apiVersion: apps/v1beta2
+metadata:
+  name: @@OPERATOR_SERVICE_NAME@@
+  namespace: @@NAMESPACE@@
+  labels:
+    app: @@OPERATOR_LABEL@@
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: @@OPERATOR_LABEL@@
+  template:
+    metadata:
+      labels:
+        app: @@OPERATOR_LABEL@@
+    spec:
+      volumes:
+        - name: kubeconfig
+          hostPath:
+            path: /etc/kubernetes/kubeconfig
+      containers:
+        - name: @@OPERATOR_LABEL@@
+          image: @@SERVER_IMAGE@@
+          args:
+            - credentials
+          resources:
+            limits:
+              cpu: 100m
+              memory: 30Mi
+            requests:
+              cpu: 100m
+              memory: 30Mi
+          env:
+            - name: KUBECONFIG
+              value: @@KUBECONFIG_PATH@@
+          volumeMounts:
+            - name: kubeconfig
+              readOnly: true
+              mountPath: @@KUBECONFIG_PATH@@
+          imagePullPolicy: Always
+  strategy:
+    type: RollingUpdate

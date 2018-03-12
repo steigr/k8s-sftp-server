@@ -1,0 +1,7 @@
+[environments]
+  [environments.development]
+    name = "sftp-server"
+    namespace = "kube-system"
+    wait = false
+    watch = false
+    watch_delay = 2

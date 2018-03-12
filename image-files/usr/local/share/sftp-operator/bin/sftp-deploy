@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+#sftp-credentials
+
+# enable call tracing
+[[ -z "$TRACE" ]] || set -x
+
+source /usr/local/share/sftp-operator/scripts/k8s-deployment
+
+deploy_manifest

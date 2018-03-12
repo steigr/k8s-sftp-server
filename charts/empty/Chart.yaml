@@ -1,0 +1,4 @@
+apiVersion: v1
+description: SFTP-Server
+name: sftp
+version: v0.1.0

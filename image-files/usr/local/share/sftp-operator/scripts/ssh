@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+
+ssh_keygen() {
+    local type="$1" passphrase="$2" comment="$3" id_file key
+
+    id_file="$(mktemp -u)"
+    ssh-keygen -q -t "$type" -N "$passphrase" -C "$comment" -f "$id_file"
+
+    key="$(cat "$id_file")"
+    rm "$id_file" "$id_file".pub
+    echo "$key"
+}
+
+ssh_run_server() {
+    /usr/sbin/sshd
+}

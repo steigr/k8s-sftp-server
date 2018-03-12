@@ -1,0 +1,47 @@
+kind: Deployment
+apiVersion: apps/v1beta2
+metadata:
+  name: @@SSH_SERVICE_NAME@@
+  namespace: @@NAMESPACE@@
+  labels:
+    app: @@SSH_LABEL@@
+spec:
+  replicas: @@REPLICAS@@
+  selector:
+    matchLabels:
+      app: @@SSH_LABEL@@
+  template:
+    metadata:
+      labels:
+        app: @@SSH_LABEL@@
+    spec:
+      volumes:
+        - name: kubeconfig
+          hostPath:
+            path: /etc/kubernetes/kubeconfig
+      containers:
+        - name: @@SSH_LABEL@@
+          image: @@SERVER_IMAGE@@
+          ports:
+            - name: @@SSH_SERVICE_NAME@@
+              containerPort: 22
+              protocol: TCP
+          args:
+            - relay
+          resources:
+            limits:
+              cpu: 2000m
+              memory: 30Mi
+            requests:
+              cpu: 10m
+              memory: 30Mi
+          env:
+            - name: KUBECONFIG
+              value: @@KUBECONFIG_PATH@@
+          volumeMounts:
+            - name: kubeconfig
+              readOnly: true
+              mountPath: @@KUBECONFIG_PATH@@
+          imagePullPolicy: Always
+  strategy:
+    type: RollingUpdate
